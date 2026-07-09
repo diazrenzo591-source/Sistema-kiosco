@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Kiosco+</title>
+<meta name="description" content="Cobro, fiado y stock para kioscos de barrio">
+
+<!-- PWA: manifest y colores -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1F6F5C">
+
+<!-- Icono para Android / Chrome -->
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+<!-- Icono e info para iPhone (Safari no lee bien el manifest solo) -->
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kiosco+">
+</head>
+<body style="margin:0;">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Kalam:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF7EF;
+    --paper-line:#E8E1D2;
+    --ink:#2B2620;
+    --ink-soft:#5A5245;
+    --teal:#1F6F5C;
+    --teal-dark:#154B3D;
+    --teal-light:#DCEEE9;
+    --gold:#E8A33D;
+    --gold-dark:#B87A1F;
+    --red:#C1443B;
+    --red-light:#F7E3E1;
+    --line: rgba(43,38,32,0.14);
+    --radius: 14px;
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;padding:0;}
+
+  #kiosco-app{
+    font-family:'Inter',sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    min-height:100%;
+    border-radius:18px;
+    overflow:hidden;
+    box-shadow:0 1px 0 rgba(0,0,0,0.03);
+  }
+
+  /* ---------- HEADER (toldo / awning) ---------- */
+  .topbar{
+    position:relative;
+    padding:22px 20px 34px 20px;
+    background:
+      repeating-linear-gradient(115deg,
+        var(--teal) 0 26px,
+        var(--teal-dark) 26px 52px);
+    color:#fff;
+    overflow:hidden;
+  }
+  .topbar::after{
+    content:"";
+    position:absolute;
+    left:0; right:0; bottom:0;
+    height:12px;
+    background: repeating-linear-gradient(90deg, #fff 0 22px, transparent 22px 44px);
+    opacity:0.9;
+    clip-path: polygon(0 0,100% 0,100% 40%,97% 100%,94% 40%,91% 100%,88% 40%,85% 100%,82% 40%,79% 100%,76% 40%,73% 100%,70% 40%,67% 100%,64% 40%,61% 100%,58% 40%,55% 100%,52% 40%,49% 100%,46% 40%,43% 100%,40% 40%,37% 100%,34% 40%,31% 100%,28% 40%,25% 100%,22% 40%,19% 100%,16% 40%,13% 100%,10% 40%,7% 100%,4% 40%,1% 100%,0 40%);
+  }
+  .topbar h1{
+    font-family:'Baloo 2',sans-serif;
+    font-weight:800;
+    font-size:26px;
+    margin:0 0 2px 0;
+    letter-spacing:0.3px;
+  }
+  .topbar p{
+    margin:0;
+    font-size:13px;
+    opacity:0.92;
+    font-weight:500;
+  }
+
+  /* ---------- TABS ---------- */
+  .tabs{
+    display:flex;
+    gap:6px;
+    padding:14px 16px 0 16px;
+    background:var(--paper);
+    border-bottom:1px solid var(--line);
+    overflow-x:auto;
+  }
+  .tab-btn{
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:13.5px;
+    padding:10px 14px;
+    border:none;
+    background:transparent;
+    color:var(--ink-soft);
+    cursor:pointer;
+    border-radius:10px 10px 0 0;
+    white-space:nowrap;
+    border-bottom:3px solid transparent;
+    transition:all 0.15s ease;
+  }
+  .tab-btn:hover{ color:var(--ink); background:rgba(31,111,92,0.06); }
+  .tab-btn.active{
+    color:var(--teal-dark);
+    border-bottom:3px solid var(--teal);
+  }
+
+  main{ padding:18px 18px 26px 18px; }
+  .panel{ display:none; }
+  .panel.active{ display:block; animation:fadeIn 0.2s ease; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+
+  h2.section-title{
+    font-family:'Baloo 2',sans-serif;
+    font-size:18px;
+    font-weight:700;
+    margin:0 0 4px 0;
+    color:var(--ink);
+  }
+  p.section-sub{
+    margin:0 0 16px 0;
+    font-size:13px;
+    color:var(--ink-soft);
+  }
+
+  /* ---------- CARDS / GENERIC ---------- */
+  .card{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:14px;
+    margin-bottom:12px;
+  }
+  .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .btn{
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:13.5px;
+    padding:9px 16px;
+    border-radius:10px;
+    border:none;
+    cursor:pointer;
+    transition:transform 0.08s ease, opacity 0.15s ease;
+  }
+  .btn:active{ transform:scale(0.97); }
+  .btn-primary{ background:var(--teal); color:#fff; }
+  .btn-primary:hover{ background:var(--teal-dark); }
+  .btn-gold{ background:var(--gold); color:var(--ink); }
+  .btn-gold:hover{ background:var(--gold-dark); color:#fff; }
+  .btn-ghost{ background:transparent; color:var(--ink-soft); border:1px solid var(--line); }
+  .btn-ghost:hover{ background:rgba(0,0,0,0.03); }
+  .btn-danger{ background:var(--red-light); color:var(--red); }
+  .btn-danger:hover{ background:var(--red); color:#fff; }
+  .btn-sm{ padding:6px 11px; font-size:12.5px; }
+  input, select{
+    font-family:'Inter',sans-serif;
+    font-size:13.5px;
+    padding:8px 10px;
+    border-radius:9px;
+    border:1px solid var(--line);
+    background:#fff;
+    color:var(--ink);
+    width:100%;
+  }
+  input:focus, select:focus{ outline:2px solid var(--teal); outline-offset:1px; }
+  label.field-label{ font-size:11.5px; font-weight:600; color:var(--ink-soft); display:block; margin-bottom:4px; }
+
+  .empty-state{
+    text-align:center;
+    padding:30px 16px;
+    color:var(--ink-soft);
+    font-size:13.5px;
+  }
+
+  /* ---------- COBRO ---------- */
+  .producto-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(130px,1fr));
+    gap:10px;
+    margin-bottom:16px;
+  }
+  .producto-chip{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px 10px;
+    cursor:pointer;
+    text-align:left;
+    transition:border-color 0.15s ease, background 0.15s ease;
+  }
+  .producto-chip:hover{ border-color:var(--teal); background:var(--teal-light); }
+  .producto-chip .nombre{ font-weight:600; font-size:13px; display:block; margin-bottom:4px; }
+  .producto-chip .precio{ font-family:'Baloo 2',sans-serif; font-weight:700; color:var(--teal-dark); font-size:15px; }
+  .producto-chip .stock-tag{ font-size:10.5px; color:var(--ink-soft); margin-top:3px; display:block; }
+  .producto-chip.low .stock-tag{ color:var(--red); font-weight:600; }
+
+  .carrito-item{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 0; border-bottom:1px solid var(--paper-line);
+    font-size:13.5px;
+  }
+  .carrito-item:last-child{ border-bottom:none; }
+  .qty-controls{ display:flex; align-items:center; gap:8px; }
+  .qty-controls button{
+    width:24px; height:24px; border-radius:6px; border:1px solid var(--line);
+    background:#fff; cursor:pointer; font-weight:700; color:var(--ink);
+  }
+
+  .total-box{
+    background:var(--teal);
+    color:#fff;
+    border-radius:var(--radius);
+    padding:16px;
+    display:flex; align-items:center; justify-content:space-between;
+    margin-top:14px;
+  }
+  .total-box .label{ font-size:12.5px; opacity:0.85; }
+  .total-box .amount{ font-family:'Baloo 2',sans-serif; font-size:24px; font-weight:800; }
+
+  .qr-mock{
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    padding:20px; background:#fff; border-radius:var(--radius); border:1px solid var(--line);
+  }
+  .qr-mock svg{ display:block; }
+
+  /* ---------- FIADO (cuaderno) ---------- */
+  .cuaderno{
+    background:#FFFDF7;
+    background-image: repeating-linear-gradient(#FFFDF7 0px, #FFFDF7 27px, var(--paper-line) 28px);
+    border:1px solid var(--line);
+    border-left:6px solid var(--gold);
+    border-radius:10px;
+    padding:16px 18px 16px 20px;
+    margin-bottom:14px;
+  }
+  .cliente-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:6px 0;
+  }
+  .cliente-nombre{
+    font-family:'Kalam',cursive;
+    font-size:19px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .cliente-deuda{
+    font-family:'Kalam',cursive;
+    font-size:18px;
+    font-weight:700;
+  }
+  .cliente-deuda.tiene{ color:var(--red); }
+  .cliente-deuda.limpio{ color:var(--teal-dark); }
+  .cliente-actions{ display:flex; gap:6px; margin-top:6px; }
+  .historial-item{
+    font-family:'Kalam',cursive;
+    font-size:14.5px;
+    color:var(--ink-soft);
+    padding:2px 0;
+  }
+  .historial-item.fiado{ color:var(--red); }
+  .historial-item.pago{ color:var(--teal-dark); }
+
+  .fiado-total-banner{
+    background:var(--gold);
+    color:var(--ink);
+    border-radius:var(--radius);
+    padding:14px 16px;
+    margin-bottom:16px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .fiado-total-banner .amount{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:20px; }
+
+  /* ---------- STOCK ---------- */
+  .stock-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 0; border-bottom:1px solid var(--paper-line);
+    gap:10px;
+  }
+  .stock-row:last-child{ border-bottom:none; }
+  .stock-nombre{ font-weight:600; font-size:13.5px; }
+  .stock-badge{
+    font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px;
+  }
+  .stock-badge.ok{ background:var(--teal-light); color:var(--teal-dark); }
+  .stock-badge.low{ background:var(--red-light); color:var(--red); }
+  .stock-input-mini{ width:60px; text-align:center; padding:5px; }
+
+  /* ---------- REPORTES ---------- */
+  .stat-grid{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+    gap:10px; margin-bottom:16px;
+  }
+  .stat-card{
+    background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px;
+  }
+  .stat-card .num{ font-family:'Baloo 2',sans-serif; font-size:22px; font-weight:800; color:var(--teal-dark); }
+  .stat-card .lbl{ font-size:11.5px; color:var(--ink-soft); font-weight:600; margin-top:2px; }
+  .ranking-item{
+    display:flex; justify-content:space-between; padding:7px 0;
+    border-bottom:1px solid var(--paper-line); font-size:13.5px;
+  }
+  .ranking-item:last-child{ border-bottom:none; }
+  .ranking-item .pos{ color:var(--gold-dark); font-weight:700; margin-right:6px; }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(43,38,32,0.45);
+    display:none; align-items:center; justify-content:center; z-index:50; padding:20px;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal-box{
+    background:#FBF7EF; border-radius:16px; padding:20px; max-width:340px; width:100%;
+    box-shadow:0 12px 40px rgba(0,0,0,0.2);
+  }
+  .modal-box h3{ font-family:'Baloo 2',sans-serif; margin:0 0 12px 0; font-size:17px; }
+  .field-group{ margin-bottom:10px; }
+  .modal-actions{ display:flex; gap:8px; margin-top:14px; }
+  .modal-actions .btn{ flex:1; }
+
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:10px;
+    font-size:13px; font-weight:600; opacity:0; transition:all 0.25s ease; z-index:60;
+    pointer-events:none;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+
+<div id="kiosco-app">
+  <div class="topbar">
+    <h1>Kiosco+</h1>
+    <p>Cobro, fiado y stock, todo en un solo lugar</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="cobro">Cobro</button>
+    <button class="tab-btn" data-tab="fiado">Fiado</button>
+    <button class="tab-btn" data-tab="stock">Stock</button>
+    <button class="tab-btn" data-tab="reportes">Reportes</button>
+  </div>
+
+  <main>
+    <!-- COBRO -->
+    <section id="panel-cobro" class="panel active">
+      <h2 class="section-title">Cobrar</h2>
+      <p class="section-sub">Tocá los productos para agregarlos a la venta</p>
+      <div id="producto-grid" class="producto-grid"></div>
+
+      <div id="carrito-card" class="card" style="display:none;">
+        <div id="carrito-list"></div>
+        <div class="total-box">
+          <div>
+            <div class="label">Total a cobrar</div>
+            <div id="carrito-total" class="amount">$0</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-ghost btn-sm" id="btn-vaciar-carrito">Vaciar</button>
+            <button class="btn btn-gold" id="btn-cobrar-qr">Cobrar con QR</button>
+          </div>
+        </div>
+      </div>
+      <div id="carrito-empty" class="empty-state">Todavía no agregaste productos a la venta.</div>
+    </section>
+
+    <!-- FIADO -->
+    <section id="panel-fiado" class="panel">
+      <h2 class="section-title">Cuaderno de fiado</h2>
+      <p class="section-sub">Lo mismo que anotabas en papel, pero que no se pierde</p>
+      <div class="fiado-total-banner">
+        <span>Total fiado pendiente</span>
+        <span id="fiado-total-general" class="amount">$0</span>
+      </div>
+      <div class="row" style="margin-bottom:12px;">
+        <div></div>
+        <button class="btn btn-primary btn-sm" id="btn-nuevo-cliente">+ Nuevo cliente</button>
+      </div>
+      <div id="fiado-list"></div>
+    </section>
+
+    <!-- STOCK -->
+    <section id="panel-stock" class="panel">
+      <h2 class="section-title">Stock</h2>
+      <p class="section-sub">Ajustá cantidades y mirá qué se te está por terminar</p>
+      <div class="row" style="margin-bottom:12px;">
+        <div></div>
+        <button class="btn btn-primary btn-sm" id="btn-nuevo-producto">+ Nuevo producto</button>
+      </div>
+      <div class="card" id="stock-card"></div>
+    </section>
+
+    <!-- REPORTES -->
+    <section id="panel-reportes" class="panel">
+      <h2 class="section-title">Reportes</h2>
+      <p class="section-sub">Cómo viene el negocio, sin tener que hacer cuentas a mano</p>
+      <div class="stat-grid">
+        <div class="stat-card"><div id="stat-hoy" class="num">$0</div><div class="lbl">Vendido hoy</div></div>
+        <div class="stat-card"><div id="stat-semana" class="num">$0</div><div class="lbl">Vendido últimos 7 días</div></div>
+        <div class="stat-card"><div id="stat-fiado" class="num">$0</div><div class="lbl">Fiado pendiente</div></div>
+      </div>
+      <div class="card">
+        <h3 style="font-family:'Baloo 2',sans-serif; margin:0 0 8px 0; font-size:14.5px;">Productos que más vendiste</h3>
+        <div id="ranking-list"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box" id="modal-box"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  // Esta app, al publicarse afuera de Claude, guarda los datos con
+  // localStorage (la memoria propia del navegador/celular), en vez de
+  // window.storage (que solo existe dentro del chat de Claude).
+  // Quedan guardados en ESE celular/navegador puntual, no en la nube.
+  const storage = {
+    async get(key){
+      const v = localStorage.getItem(key);
+      return v === null ? null : { key, value: v };
+    },
+    async set(key, value){
+      localStorage.setItem(key, value);
+      return { key, value };
+    }
+  };
+
+  const fmt = n => '$' + Math.round(n).toLocaleString('es-AR');
+  const todayStr = () => new Date().toISOString().slice(0,10);
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+
+  let productos = [];
+  let clientes = [];
+  let ventas = [];
+  let carrito = {}; // productoId -> cantidad
+
+  const DEFAULT_PRODUCTOS = [
+    {id:'p1', nombre:'Coca Cola 500ml', precio:1200, stock:24},
+    {id:'p2', nombre:'Alfajor Jorgito', precio:600, stock:40},
+    {id:'p3', nombre:'Cigarrillos', precio:3500, stock:15},
+    {id:'p4', nombre:'Pan lactal', precio:1800, stock:10},
+    {id:'p5', nombre:'Agua mineral', precio:900, stock:30},
+    {id:'p6', nombre:'Caramelos x10', precio:400, stock:60},
+  ];
+  const DEFAULT_CLIENTES = [
+    {id:'c1', nombre:'Juan (ejemplo)', telefono:'', deuda:0, historial:[]}
+  ];
+
+  function toast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 1800);
+  }
+
+  async function loadAll(){
+    try{
+      const r = await storage.get('productos', false);
+      productos = r ? JSON.parse(r.value) : DEFAULT_PRODUCTOS;
+    }catch(e){ productos = DEFAULT_PRODUCTOS; }
+    try{
+      const r = await storage.get('clientes', false);
+      clientes = r ? JSON.parse(r.value) : DEFAULT_CLIENTES;
+    }catch(e){ clientes = DEFAULT_CLIENTES; }
+    try{
+      const r = await storage.get('ventas', false);
+      ventas = r ? JSON.parse(r.value) : [];
+    }catch(e){ ventas = []; }
+    renderAll();
+  }
+
+  async function saveProductos(){ try{ await storage.set('productos', JSON.stringify(productos), false); }catch(e){ toast('No se pudo guardar (stock)'); } }
+  async function saveClientes(){ try{ await storage.set('clientes', JSON.stringify(clientes), false); }catch(e){ toast('No se pudo guardar (fiado)'); } }
+  async function saveVentas(){ try{ await storage.set('ventas', JSON.stringify(ventas), false); }catch(e){ toast('No se pudo guardar (ventas)'); } }
+
+  function renderAll(){
+    renderProductoGrid();
+    renderCarrito();
+    renderFiado();
+    renderStock();
+    renderReportes();
+  }
+
+  // ---------------- TABS ----------------
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+      if(btn.dataset.tab === 'reportes') renderReportes();
+    });
+  });
+
+  // ---------------- COBRO ----------------
+  function renderProductoGrid(){
+    const grid = document.getElementById('producto-grid');
+    grid.innerHTML = '';
+    productos.forEach(p=>{
+      const low = p.stock <= 3;
+      const chip = document.createElement('button');
+      chip.className = 'producto-chip' + (low ? ' low' : '');
+      chip.innerHTML = `<span class="nombre">${p.nombre}</span><span class="precio">${fmt(p.precio)}</span><span class="stock-tag">${p.stock <= 0 ? 'Sin stock' : 'Quedan ' + p.stock}</span>`;
+      chip.disabled = p.stock <= 0;
+      chip.addEventListener('click', ()=>{
+        carrito[p.id] = (carrito[p.id] || 0) + 1;
+        renderCarrito();
+      });
+      grid.appendChild(chip);
+    });
+  }
+
+  function renderCarrito(){
+    const ids = Object.keys(carrito).filter(id=>carrito[id] > 0);
+    const list = document.getElementById('carrito-list');
+    const card = document.getElementById('carrito-card');
+    const empty = document.getElementById('carrito-empty');
+    if(ids.length === 0){
+      card.style.display = 'none';
+      empty.style.display = 'block';
+      return;
+    }
+    card.style.display = 'block';
+    empty.style.display = 'none';
+    list.innerHTML = '';
+    let total = 0;
+    ids.forEach(id=>{
+      const p = productos.find(x=>x.id===id);
+      if(!p) return;
+      const cant = carrito[id];
+      total += cant * p.precio;
+      const row = document.createElement('div');
+      row.className = 'carrito-item';
+      row.innerHTML = `
+        <span>${p.nombre}</span>
+        <div class="qty-controls">
+          <button data-act="menos" data-id="${id}">-</button>
+          <span>${cant}</span>
+          <button data-act="mas" data-id="${id}">+</button>
+        </div>
+        <span>${fmt(cant*p.precio)}</span>`;
+      list.appendChild(row);
+    });
+    document.getElementById('carrito-total').textContent = fmt(total);
+    list.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const id = b.dataset.id;
+        if(b.dataset.act === 'mas') carrito[id] += 1;
+        else carrito[id] = Math.max(0, carrito[id]-1);
+        renderCarrito();
+      });
+    });
+  }
+
+  document.getElementById('btn-vaciar-carrito').addEventListener('click', ()=>{
+    carrito = {};
+    renderCarrito();
+  });
+
+  document.getElementById('btn-cobrar-qr').addEventListener('click', ()=>{
+    const ids = Object.keys(carrito).filter(id=>carrito[id]>0);
+    if(ids.length === 0) return;
+    let total = 0;
+    const items = ids.map(id=>{
+      const p = productos.find(x=>x.id===id);
+      total += p.precio * carrito[id];
+      return {productoId:id, nombre:p.nombre, cantidad:carrito[id], precio:p.precio};
+    });
+    openModal(`
+      <h3>Cobrar ${fmt(total)}</h3>
+      <div class="qr-mock">
+        ${qrSvgMock()}
+        <p style="font-size:12.5px;color:var(--ink-soft);text-align:center;margin:0;">
+          Esto simula el QR de cobro (Mercado Pago / Modo).<br>Para que funcione con pagos reales hay que conectarlo a la API del proveedor de pagos.
+        </p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="modal-confirm-cobro">Ya me pagaron</button>
+      </div>
+    `);
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('modal-confirm-cobro').addEventListener('click', async ()=>{
+      items.forEach(it=>{
+        const p = productos.find(x=>x.id===it.productoId);
+        if(p) p.stock = Math.max(0, p.stock - it.cantidad);
+      });
+      ventas.push({fecha: new Date().toISOString(), items, total});
+      carrito = {};
+      await saveProductos();
+      await saveVentas();
+      closeModal();
+      renderAll();
+      toast('Venta cobrada: ' + fmt(total));
+    });
+  });
+
+  function qrSvgMock(){
+    // decorative mock QR, not a real scannable code
+    let cells = '';
+    const size = 8, cell = 16;
+    let seed = 42;
+    const rand = () => { seed = (seed*9301+49297)%233280; return seed/233280; };
+    for(let y=0;y<size;y++){
+      for(let x=0;x<size;x++){
+        if(rand() > 0.45){
+          cells += `<rect x="${x*cell}" y="${y*cell}" width="${cell-2}" height="${cell-2}" fill="var(--ink)"/>`;
+        }
+      }
+    }
+    return `<svg width="140" height="140" viewBox="0 0 ${size*cell} ${size*cell}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100%" height="100%" fill="#fff"/>${cells}</svg>`;
+  }
+
+  // ---------------- FIADO ----------------
+  function renderFiado(){
+    const list = document.getElementById('fiado-list');
+    list.innerHTML = '';
+    let totalGeneral = 0;
+    if(clientes.length === 0){
+      list.innerHTML = '<div class="empty-state">Todavía no cargaste clientes. Tocá "+ Nuevo cliente".</div>';
+    }
+    clientes.forEach(c=>{
+      totalGeneral += c.deuda;
+      const box = document.createElement('div');
+      box.className = 'cuaderno';
+      const hist = (c.historial || []).slice(-4).reverse().map(h=>{
+        const signo = h.tipo === 'fiado' ? '+ ' : '- ';
+        return `<div class="historial-item ${h.tipo}">${signo}${fmt(h.monto)} · ${h.detalle || (h.tipo==='fiado'?'Fiado':'Pago')} (${h.fecha})</div>`;
+      }).join('');
+      box.innerHTML = `
+        <div class="cliente-row">
+          <span class="cliente-nombre">${c.nombre}</span>
+          <span class="cliente-deuda ${c.deuda>0?'tiene':'limpio'}">${fmt(c.deuda)}</span>
+        </div>
+        ${hist}
+        <div class="cliente-actions">
+          <button class="btn btn-danger btn-sm" data-act="fiar" data-id="${c.id}">Anotar fiado</button>
+          <button class="btn btn-primary btn-sm" data-act="pagar" data-id="${c.id}">Registrar pago</button>
+          ${c.deuda > 0 ? `<button class="btn btn-gold btn-sm" data-act="wsp" data-id="${c.id}">Recordar por WhatsApp</button>` : ''}
+          <button class="btn btn-ghost btn-sm" data-act="borrar" data-id="${c.id}">Borrar</button>
+        </div>`;
+      list.appendChild(box);
+    });
+    document.getElementById('fiado-total-general').textContent = fmt(totalGeneral);
+
+    list.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const id = b.dataset.id;
+        const cliente = clientes.find(c=>c.id===id);
+        if(b.dataset.act === 'fiar') openFiadoModal(cliente, 'fiado');
+        else if(b.dataset.act === 'pagar') openFiadoModal(cliente, 'pago');
+        else if(b.dataset.act === 'wsp') enviarRecordatorioWsp(cliente);
+        else if(b.dataset.act === 'borrar'){
+          if(confirm('¿Borrar a ' + cliente.nombre + ' del cuaderno?')){
+            clientes = clientes.filter(c=>c.id!==id);
+            saveClientes();
+            renderFiado();
+            renderReportes();
+          }
+        }
+      });
+    });
+  }
+
+  document.getElementById('btn-nuevo-cliente').addEventListener('click', ()=>{
+    openModal(`
+      <h3>Nuevo cliente</h3>
+      <div class="field-group">
+        <label class="field-label">Nombre o apodo</label>
+        <input type="text" id="input-nombre-cliente" placeholder="Ej: Marta de la esquina">
+      </div>
+      <div class="field-group">
+        <label class="field-label">WhatsApp (opcional, con código de país)</label>
+        <input type="text" id="input-telefono-cliente" placeholder="Ej: 5491122334455">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="modal-guardar-cliente">Guardar</button>
+      </div>
+    `);
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('modal-guardar-cliente').addEventListener('click', async ()=>{
+      const nombre = document.getElementById('input-nombre-cliente').value.trim();
+      const telefono = document.getElementById('input-telefono-cliente').value.trim().replace(/[^0-9]/g,'');
+      if(!nombre) return;
+      clientes.push({id: uid(), nombre, telefono, deuda:0, historial:[]});
+      await saveClientes();
+      closeModal();
+      renderFiado();
+      toast('Cliente agregado');
+    });
+  });
+
+  function enviarRecordatorioWsp(cliente){
+    if(!cliente.telefono){
+      openModal(`
+        <h3>Falta el WhatsApp de ${cliente.nombre}</h3>
+        <div class="field-group">
+          <label class="field-label">Número con código de país (sin + ni espacios)</label>
+          <input type="text" id="input-telefono-nuevo" placeholder="Ej: 5491122334455">
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+          <button class="btn btn-primary" id="modal-guardar-tel">Guardar y enviar</button>
+        </div>
+      `);
+      document.getElementById('modal-cancel').addEventListener('click', closeModal);
+      document.getElementById('modal-guardar-tel').addEventListener('click', async ()=>{
+        const tel = document.getElementById('input-telefono-nuevo').value.trim().replace(/[^0-9]/g,'');
+        if(!tel) return;
+        cliente.telefono = tel;
+        await saveClientes();
+        closeModal();
+        abrirWhatsApp(cliente);
+      });
+      return;
+    }
+    abrirWhatsApp(cliente);
+  }
+
+  function abrirWhatsApp(cliente){
+    const mensaje = `Hola ${cliente.nombre}! Te escribo del kiosco para recordarte que tenés ${fmt(cliente.deuda)} de fiado pendiente. Cuando puedas te paso a cobrar o me alcanzás vos. Gracias!`;
+    const url = `https://wa.me/${cliente.telefono}?text=${encodeURIComponent(mensaje)}`;
+    window.open(url, '_blank');
+  }
+
+  function openFiadoModal(cliente, tipo){
+    const titulo = tipo === 'fiado' ? 'Anotar fiado a ' + cliente.nombre : 'Registrar pago de ' + cliente.nombre;
+    openModal(`
+      <h3>${titulo}</h3>
+      <div class="field-group">
+        <label class="field-label">Monto</label>
+        <input type="number" id="input-monto" placeholder="0" min="0">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Detalle (opcional)</label>
+        <input type="text" id="input-detalle" placeholder="Ej: gaseosa y pan">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="modal-guardar-fiado">Guardar</button>
+      </div>
+    `);
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('modal-guardar-fiado').addEventListener('click', async ()=>{
+      const monto = parseFloat(document.getElementById('input-monto').value);
+      const detalle = document.getElementById('input-detalle').value.trim();
+      if(!monto || monto <= 0) return;
+      cliente.historial = cliente.historial || [];
+      cliente.historial.push({tipo, monto, detalle, fecha: todayStr()});
+      cliente.deuda = tipo === 'fiado' ? cliente.deuda + monto : Math.max(0, cliente.deuda - monto);
+      await saveClientes();
+      closeModal();
+      renderFiado();
+      renderReportes();
+      toast(tipo === 'fiado' ? 'Fiado anotado' : 'Pago registrado');
+    });
+  }
+
+  // ---------------- STOCK ----------------
+  function renderStock(){
+    const card = document.getElementById('stock-card');
+    card.innerHTML = '';
+    if(productos.length === 0){
+      card.innerHTML = '<div class="empty-state">No hay productos cargados.</div>';
+      return;
+    }
+    productos.forEach(p=>{
+      const low = p.stock <= 3;
+      const row = document.createElement('div');
+      row.className = 'stock-row';
+      row.innerHTML = `
+        <span class="stock-nombre">${p.nombre}</span>
+        <span class="stock-badge ${low ? 'low':'ok'}">${low ? 'Se está por terminar' : 'Stock ok'}</span>
+        <input type="number" class="stock-input-mini" data-id="${p.id}" value="${p.stock}" min="0">
+      `;
+      card.appendChild(row);
+    });
+    card.querySelectorAll('.stock-input-mini').forEach(inp=>{
+      inp.addEventListener('change', async ()=>{
+        const p = productos.find(x=>x.id===inp.dataset.id);
+        p.stock = Math.max(0, parseInt(inp.value) || 0);
+        await saveProductos();
+        renderStock();
+        renderProductoGrid();
+      });
+    });
+  }
+
+  document.getElementById('btn-nuevo-producto').addEventListener('click', ()=>{
+    openModal(`
+      <h3>Nuevo producto</h3>
+      <div class="field-group">
+        <label class="field-label">Nombre</label>
+        <input type="text" id="input-nombre-prod" placeholder="Ej: Chicles Beldent">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Precio</label>
+        <input type="number" id="input-precio-prod" placeholder="0" min="0">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Stock inicial</label>
+        <input type="number" id="input-stock-prod" placeholder="0" min="0">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="modal-guardar-prod">Guardar</button>
+      </div>
+    `);
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('modal-guardar-prod').addEventListener('click', async ()=>{
+      const nombre = document.getElementById('input-nombre-prod').value.trim();
+      const precio = parseFloat(document.getElementById('input-precio-prod').value);
+      const stock = parseInt(document.getElementById('input-stock-prod').value) || 0;
+      if(!nombre || !precio) return;
+      productos.push({id: uid(), nombre, precio, stock});
+      await saveProductos();
+      closeModal();
+      renderProductoGrid();
+      renderStock();
+      toast('Producto agregado');
+    });
+  });
+
+  // ---------------- REPORTES ----------------
+  function renderReportes(){
+    const today = todayStr();
+    const now = Date.now();
+    const sevenDays = 7*24*60*60*1000;
+
+    let hoy = 0, semana = 0;
+    const rankingMap = {};
+    ventas.forEach(v=>{
+      const vDate = new Date(v.fecha);
+      const isToday = v.fecha.slice(0,10) === today;
+      const inWeek = (now - vDate.getTime()) <= sevenDays;
+      if(isToday) hoy += v.total;
+      if(inWeek) semana += v.total;
+      v.items.forEach(it=>{
+        rankingMap[it.nombre] = (rankingMap[it.nombre] || 0) + it.cantidad;
+      });
+    });
+    const fiadoPendiente = clientes.reduce((s,c)=>s+c.deuda,0);
+
+    document.getElementById('stat-hoy').textContent = fmt(hoy);
+    document.getElementById('stat-semana').textContent = fmt(semana);
+    document.getElementById('stat-fiado').textContent = fmt(fiadoPendiente);
+
+    const ranking = Object.entries(rankingMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const rankList = document.getElementById('ranking-list');
+    rankList.innerHTML = ranking.length === 0
+      ? '<div class="empty-state">Todavía no hay ventas registradas.</div>'
+      : ranking.map((r,i)=>`<div class="ranking-item"><span><span class="pos">${i+1}.</span>${r[0]}</span><span>${r[1]} unid.</span></div>`).join('');
+  }
+
+  // ---------------- MODAL ----------------
+  function openModal(html){
+    document.getElementById('modal-box').innerHTML = html;
+    document.getElementById('modal-overlay').classList.add('open');
+  }
+  function closeModal(){
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+  document.getElementById('modal-overlay').addEventListener('click', (e)=>{
+    if(e.target.id === 'modal-overlay') closeModal();
+  });
+
+  loadAll();
+})();
+</script>
+
+<script>
+  // Registrar el service worker para que la app funcione sin wifi/datos
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js").catch(err => {
+        console.warn("No se pudo registrar el service worker:", err);
+      });
+    });
+  }
+</script>
+</body>
+</html>
