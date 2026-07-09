@@ -18,6 +18,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Kiosco+">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body style="margin:0;">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Kalam:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -283,7 +284,7 @@
   .stock-row{
     display:flex; align-items:center; justify-content:space-between;
     padding:10px 0; border-bottom:1px solid var(--paper-line);
-    gap:10px;
+    gap:10px; flex-wrap:wrap;
   }
   .stock-row:last-child{ border-bottom:none; }
   .stock-nombre{ font-weight:600; font-size:13.5px; }
@@ -410,6 +411,23 @@
         <h3 style="font-family:'Baloo 2',sans-serif; margin:0 0 8px 0; font-size:14.5px;">Productos que más vendiste</h3>
         <div id="ranking-list"></div>
       </div>
+      <div class="card">
+        <h3 style="font-family:'Baloo 2',sans-serif; margin:0 0 6px 0; font-size:14.5px;">Conexión con Mercado Pago</h3>
+        <p style="font-size:12.5px; color:var(--ink-soft); margin:0 0 10px 0;">
+          Pegá acá la URL de tu backend (la que te dio Render/Railway) para que el cobro con QR sea real y se confirme solo. Si la dejás vacía, el cobro sigue funcionando en modo manual.
+        </p>
+        <div class="field-group">
+          <input type="text" id="input-backend-url" placeholder="https://tu-kiosco.onrender.com">
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-guardar-backend">Guardar</button>
+      </div>
+      <div class="card">
+        <h3 style="font-family:'Baloo 2',sans-serif; margin:0 0 6px 0; font-size:14.5px;">Zona de reinicio</h3>
+        <p style="font-size:12.5px; color:var(--ink-soft); margin:0 0 10px 0;">
+          Borra todos los productos, clientes y ventas cargados en este celular, para arrancar de cero (por ejemplo, al instalarla por primera vez en un kiosco nuevo).
+        </p>
+        <button class="btn btn-danger btn-sm" id="btn-reset-app">Borrar todos los datos</button>
+      </div>
     </section>
   </main>
 </div>
@@ -445,17 +463,9 @@
   let ventas = [];
   let carrito = {}; // productoId -> cantidad
 
-  const DEFAULT_PRODUCTOS = [
-    {id:'p1', nombre:'Coca Cola 500ml', precio:1200, stock:24},
-    {id:'p2', nombre:'Alfajor Jorgito', precio:600, stock:40},
-    {id:'p3', nombre:'Cigarrillos', precio:3500, stock:15},
-    {id:'p4', nombre:'Pan lactal', precio:1800, stock:10},
-    {id:'p5', nombre:'Agua mineral', precio:900, stock:30},
-    {id:'p6', nombre:'Caramelos x10', precio:400, stock:60},
-  ];
-  const DEFAULT_CLIENTES = [
-    {id:'c1', nombre:'Juan (ejemplo)', telefono:'', deuda:0, historial:[]}
-  ];
+  // Arranca vacio: cada kiosco carga sus propios productos y clientes.
+  const DEFAULT_PRODUCTOS = [];
+  const DEFAULT_CLIENTES = [];
 
   function toast(msg){
     const t = document.getElementById('toast');
@@ -568,6 +578,12 @@
     renderCarrito();
   });
 
+  let pollingActivo = null;
+
+  function getBackendUrl(){
+    return (localStorage.getItem('backendUrl') || '').trim().replace(/\/$/, '');
+  }
+
   document.getElementById('btn-cobrar-qr').addEventListener('click', ()=>{
     const ids = Object.keys(carrito).filter(id=>carrito[id]>0);
     if(ids.length === 0) return;
@@ -577,12 +593,103 @@
       total += p.precio * carrito[id];
       return {productoId:id, nombre:p.nombre, cantidad:carrito[id], precio:p.precio};
     });
+
+    const backendUrl = getBackendUrl();
+    if(backendUrl){
+      cobrarConBackendReal(total, items, backendUrl);
+    }else{
+      cobrarModoManual(total, items);
+    }
+  });
+
+  // -------- Modo real: crea el cobro en el backend y espera la confirmación sola --------
+  async function cobrarConBackendReal(total, items, backendUrl){
+    openModal(`
+      <h3>Generando el cobro...</h3>
+      <p style="font-size:13px;color:var(--ink-soft);">Un segundo, estamos armando el QR con Mercado Pago.</p>
+    `);
+    let data;
+    try{
+      const resp = await fetch(backendUrl + '/crear-cobro', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ monto: total, descripcion: items.map(i=>i.nombre).join(', ') })
+      });
+      if(!resp.ok) throw new Error('El backend respondió con error');
+      data = await resp.json();
+    }catch(err){
+      openModal(`
+        <h3>No se pudo conectar</h3>
+        <p style="font-size:13px;color:var(--ink-soft);">
+          No llegamos al backend (${backendUrl}). Puede estar apagado o mal escrita la URL en Reportes.
+        </p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" id="modal-cancel">Cerrar</button>
+          <button class="btn btn-gold" id="modal-manual-fallback">Cobrar manual igual</button>
+        </div>
+      `);
+      document.getElementById('modal-cancel').addEventListener('click', closeModal);
+      document.getElementById('modal-manual-fallback').addEventListener('click', ()=> cobrarModoManual(total, items));
+      return;
+    }
+
+    const { orderId, qrData } = data;
+    if(!orderId || !qrData){
+      openModal(`<h3>Respuesta inesperada del backend</h3><p style="font-size:13px;">No vino el QR. Revisá los datos guardados en Mercado Pago (MP_ACCESS_TOKEN / MP_EXTERNAL_POS_ID).</p>
+        <div class="modal-actions"><button class="btn btn-primary" id="modal-cancel">Cerrar</button></div>`);
+      document.getElementById('modal-cancel').addEventListener('click', closeModal);
+      return;
+    }
+
+    openModal(`
+      <h3>Cobrar ${fmt(total)}</h3>
+      <div class="qr-mock">
+        <div id="qr-real-container"></div>
+        <p id="qr-estado-txt" style="font-size:12.5px;color:var(--ink-soft);text-align:center;margin:0;">
+          Esperando que el cliente pague... se confirma solo.
+        </p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+      </div>
+    `);
+    new QRCode(document.getElementById('qr-real-container'), {
+      text: qrData, width: 180, height: 180,
+    });
+
+    document.getElementById('modal-cancel').addEventListener('click', ()=>{
+      if(pollingActivo) clearInterval(pollingActivo);
+      closeModal();
+    });
+
+    // Pregunta cada 3 segundos si ya se pago, sin que nadie toque nada.
+    pollingActivo = setInterval(async ()=>{
+      try{
+        const r = await fetch(backendUrl + '/estado/' + orderId);
+        if(!r.ok) return;
+        const estado = await r.json();
+        if(estado.estado === 'processed' || estado.estado === 'paid' || estado.estado === 'approved'){
+          clearInterval(pollingActivo);
+          await confirmarVentaCobrada(total, items);
+          closeModal();
+          toast('¡Se acreditó el pago! ' + fmt(total));
+        }else if(estado.estado === 'cancelled' || estado.estado === 'expired'){
+          clearInterval(pollingActivo);
+          const txt = document.getElementById('qr-estado-txt');
+          if(txt) txt.textContent = 'El QR venció o se canceló. Cerrá y volvé a intentar.';
+        }
+      }catch(err){ /* si falla una consulta, prueba de nuevo en la siguiente vuelta */ }
+    }, 3000);
+  }
+
+  // -------- Modo manual: el mismo mock de antes, para cuando no hay backend configurado --------
+  function cobrarModoManual(total, items){
     openModal(`
       <h3>Cobrar ${fmt(total)}</h3>
       <div class="qr-mock">
         ${qrSvgMock()}
         <p style="font-size:12.5px;color:var(--ink-soft);text-align:center;margin:0;">
-          Esto simula el QR de cobro (Mercado Pago / Modo).<br>Para que funcione con pagos reales hay que conectarlo a la API del proveedor de pagos.
+          Modo manual: no hay backend de Mercado Pago configurado (Reportes → Conexión con Mercado Pago). Este QR es decorativo.
         </p>
       </div>
       <div class="modal-actions">
@@ -592,19 +699,23 @@
     `);
     document.getElementById('modal-cancel').addEventListener('click', closeModal);
     document.getElementById('modal-confirm-cobro').addEventListener('click', async ()=>{
-      items.forEach(it=>{
-        const p = productos.find(x=>x.id===it.productoId);
-        if(p) p.stock = Math.max(0, p.stock - it.cantidad);
-      });
-      ventas.push({fecha: new Date().toISOString(), items, total});
-      carrito = {};
-      await saveProductos();
-      await saveVentas();
+      await confirmarVentaCobrada(total, items);
       closeModal();
-      renderAll();
       toast('Venta cobrada: ' + fmt(total));
     });
-  });
+  }
+
+  async function confirmarVentaCobrada(total, items){
+    items.forEach(it=>{
+      const p = productos.find(x=>x.id===it.productoId);
+      if(p) p.stock = Math.max(0, p.stock - it.cantidad);
+    });
+    ventas.push({fecha: new Date().toISOString(), items, total});
+    carrito = {};
+    await saveProductos();
+    await saveVentas();
+    renderAll();
+  }
 
   function qrSvgMock(){
     // decorative mock QR, not a real scannable code
@@ -785,6 +896,7 @@
         <span class="stock-nombre">${p.nombre}</span>
         <span class="stock-badge ${low ? 'low':'ok'}">${low ? 'Se está por terminar' : 'Stock ok'}</span>
         <input type="number" class="stock-input-mini" data-id="${p.id}" value="${p.stock}" min="0">
+        <button class="btn btn-ghost btn-sm" data-act="borrar-prod" data-id="${p.id}">Borrar</button>
       `;
       card.appendChild(row);
     });
@@ -795,6 +907,18 @@
         await saveProductos();
         renderStock();
         renderProductoGrid();
+      });
+    });
+    card.querySelectorAll('[data-act="borrar-prod"]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const p = productos.find(x=>x.id===btn.dataset.id);
+        if(!p) return;
+        if(confirm('¿Borrar "' + p.nombre + '" del stock?')){
+          productos = productos.filter(x=>x.id!==btn.dataset.id);
+          await saveProductos();
+          renderStock();
+          renderProductoGrid();
+        }
       });
     });
   }
@@ -836,6 +960,10 @@
 
   // ---------------- REPORTES ----------------
   function renderReportes(){
+    const inputBackend = document.getElementById('input-backend-url');
+    if(inputBackend && document.activeElement !== inputBackend){
+      inputBackend.value = getBackendUrl();
+    }
     const today = todayStr();
     const now = Date.now();
     const sevenDays = 7*24*60*60*1000;
@@ -875,6 +1003,21 @@
   }
   document.getElementById('modal-overlay').addEventListener('click', (e)=>{
     if(e.target.id === 'modal-overlay') closeModal();
+  });
+
+  document.getElementById('btn-guardar-backend').addEventListener('click', () => {
+    const url = document.getElementById('input-backend-url').value.trim();
+    localStorage.setItem('backendUrl', url);
+    toast(url ? 'Backend guardado' : 'Se quitó el backend (vuelve el modo manual)');
+  });
+
+  document.getElementById('btn-reset-app').addEventListener('click', () => {
+    if(confirm('¿Seguro? Esto borra productos, clientes y ventas de este celular. No se puede deshacer.')){
+      localStorage.removeItem('productos');
+      localStorage.removeItem('clientes');
+      localStorage.removeItem('ventas');
+      location.reload();
+    }
   });
 
   loadAll();
