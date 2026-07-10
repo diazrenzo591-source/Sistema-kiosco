@@ -18,7 +18,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Kiosco+">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body style="margin:0;">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Kalam:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -353,7 +352,7 @@
     <!-- COBRO -->
     <section id="panel-cobro" class="panel active">
       <h2 class="section-title">Cobrar</h2>
-      <p class="section-sub">Tocá los productos para agregarlos a la venta</p>
+      <p class="section-sub">Elegí los productos de la venta</p>
       <div id="producto-grid" class="producto-grid"></div>
 
       <div id="carrito-card" class="card" style="display:none;">
@@ -374,8 +373,8 @@
 
     <!-- FIADO -->
     <section id="panel-fiado" class="panel">
-      <h2 class="section-title">Cuaderno de fiado</h2>
-      <p class="section-sub">Lo mismo que anotabas en papel, pero que no se pierde</p>
+      <h2 class="section-title">Fiado</h2>
+      <p class="section-sub">Cuentas de tus clientes</p>
       <div class="fiado-total-banner">
         <span>Total fiado pendiente</span>
         <span id="fiado-total-general" class="amount">$0</span>
@@ -390,7 +389,7 @@
     <!-- STOCK -->
     <section id="panel-stock" class="panel">
       <h2 class="section-title">Stock</h2>
-      <p class="section-sub">Ajustá cantidades y mirá qué se te está por terminar</p>
+      <p class="section-sub">Cantidades disponibles</p>
       <div class="row" style="margin-bottom:12px;">
         <div></div>
         <button class="btn btn-primary btn-sm" id="btn-nuevo-producto">+ Nuevo producto</button>
@@ -401,7 +400,7 @@
     <!-- REPORTES -->
     <section id="panel-reportes" class="panel">
       <h2 class="section-title">Reportes</h2>
-      <p class="section-sub">Cómo viene el negocio, sin tener que hacer cuentas a mano</p>
+      <p class="section-sub">Resumen del negocio</p>
       <div class="stat-grid">
         <div class="stat-card"><div id="stat-hoy" class="num">$0</div><div class="lbl">Vendido hoy</div></div>
         <div class="stat-card"><div id="stat-semana" class="num">$0</div><div class="lbl">Vendido últimos 7 días</div></div>
@@ -412,14 +411,10 @@
         <div id="ranking-list"></div>
       </div>
       <div class="card">
-        <h3 style="font-family:'Baloo 2',sans-serif; margin:0 0 6px 0; font-size:14.5px;">Conexión con Mercado Pago</h3>
-        <p style="font-size:12.5px; color:var(--ink-soft); margin:0 0 10px 0;">
-          Pegá acá la URL de tu backend (la que te dio Render/Railway) para que el cobro con QR sea real y se confirme solo. Si la dejás vacía, el cobro sigue funcionando en modo manual.
-        </p>
-        <div class="field-group">
-          <input type="text" id="input-backend-url" placeholder="https://tu-kiosco.onrender.com">
-        </div>
-        <button class="btn btn-primary btn-sm" id="btn-guardar-backend">Guardar</button>
+        <h3 style="font-family:'Baloo 2',sans-serif; margin:0 0 8px 0; font-size:14.5px;">Tu QR de cobro</h3>
+        <div id="qr-guardado-preview" style="margin-bottom:10px;"></div>
+        <input type="file" id="input-qr-imagen" accept="image/*" style="margin-bottom:8px;">
+        <button class="btn btn-primary btn-sm" id="btn-guardar-qr">Guardar QR</button>
       </div>
       <div class="card">
         <h3 style="font-family:'Baloo 2',sans-serif; margin:0 0 6px 0; font-size:14.5px;">Zona de reinicio</h3>
@@ -578,12 +573,6 @@
     renderCarrito();
   });
 
-  let pollingActivo = null;
-
-  function getBackendUrl(){
-    return (localStorage.getItem('backendUrl') || '').trim().replace(/\/$/, '');
-  }
-
   document.getElementById('btn-cobrar-qr').addEventListener('click', ()=>{
     const ids = Object.keys(carrito).filter(id=>carrito[id]>0);
     if(ids.length === 0) return;
@@ -594,107 +583,15 @@
       return {productoId:id, nombre:p.nombre, cantidad:carrito[id], precio:p.precio};
     });
 
-    const backendUrl = getBackendUrl();
-    if(backendUrl){
-      cobrarConBackendReal(total, items, backendUrl);
-    }else{
-      cobrarModoManual(total, items);
-    }
-  });
-
-  // -------- Modo real: crea el cobro en el backend y espera la confirmación sola --------
-  async function cobrarConBackendReal(total, items, backendUrl){
-    openModal(`
-      <h3>Generando el cobro...</h3>
-      <p style="font-size:13px;color:var(--ink-soft);">Un segundo, estamos armando el QR con Mercado Pago.</p>
-    `);
-    let data;
-    try{
-      const resp = await fetch(backendUrl + '/crear-cobro', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ monto: total, descripcion: items.map(i=>i.nombre).join(', ') })
-      });
-      if(!resp.ok) throw new Error('El backend respondió con error');
-      data = await resp.json();
-    }catch(err){
-      openModal(`
-        <h3>No se pudo conectar</h3>
-        <p style="font-size:13px;color:var(--ink-soft);">
-          No llegamos al backend (${backendUrl}). Puede estar apagado o mal escrita la URL en Reportes.
-        </p>
-        <div class="modal-actions">
-          <button class="btn btn-ghost" id="modal-cancel">Cerrar</button>
-          <button class="btn btn-gold" id="modal-manual-fallback">Cobrar manual igual</button>
-        </div>
-      `);
-      document.getElementById('modal-cancel').addEventListener('click', closeModal);
-      document.getElementById('modal-manual-fallback').addEventListener('click', ()=> cobrarModoManual(total, items));
-      return;
-    }
-
-    const { orderId, qrData } = data;
-    if(!orderId || !qrData){
-      openModal(`<h3>Respuesta inesperada del backend</h3><p style="font-size:13px;">No vino el QR. Revisá los datos guardados en Mercado Pago (MP_ACCESS_TOKEN / MP_EXTERNAL_POS_ID).</p>
-        <div class="modal-actions"><button class="btn btn-primary" id="modal-cancel">Cerrar</button></div>`);
-      document.getElementById('modal-cancel').addEventListener('click', closeModal);
-      return;
-    }
-
+    const qrGuardado = localStorage.getItem('qrImagen');
     openModal(`
       <h3>Cobrar ${fmt(total)}</h3>
       <div class="qr-mock">
-        <div id="qr-real-container"></div>
-        <p id="qr-estado-txt" style="font-size:12.5px;color:var(--ink-soft);text-align:center;margin:0;">
-          Esperando que el cliente pague... se confirma solo.
-        </p>
+        ${qrGuardado ? `<img src="${qrGuardado}" alt="QR de cobro" style="width:180px;height:180px;object-fit:contain;border-radius:8px;">` : `<p style="font-size:13px;color:var(--ink-soft);text-align:center;">Cargá tu QR en Reportes → Tu QR de cobro</p>`}
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
-      </div>
-    `);
-    new QRCode(document.getElementById('qr-real-container'), {
-      text: qrData, width: 180, height: 180,
-    });
-
-    document.getElementById('modal-cancel').addEventListener('click', ()=>{
-      if(pollingActivo) clearInterval(pollingActivo);
-      closeModal();
-    });
-
-    // Pregunta cada 3 segundos si ya se pago, sin que nadie toque nada.
-    pollingActivo = setInterval(async ()=>{
-      try{
-        const r = await fetch(backendUrl + '/estado/' + orderId);
-        if(!r.ok) return;
-        const estado = await r.json();
-        if(estado.estado === 'processed' || estado.estado === 'paid' || estado.estado === 'approved'){
-          clearInterval(pollingActivo);
-          await confirmarVentaCobrada(total, items);
-          closeModal();
-          toast('¡Se acreditó el pago! ' + fmt(total));
-        }else if(estado.estado === 'cancelled' || estado.estado === 'expired'){
-          clearInterval(pollingActivo);
-          const txt = document.getElementById('qr-estado-txt');
-          if(txt) txt.textContent = 'El QR venció o se canceló. Cerrá y volvé a intentar.';
-        }
-      }catch(err){ /* si falla una consulta, prueba de nuevo en la siguiente vuelta */ }
-    }, 3000);
-  }
-
-  // -------- Modo manual: el mismo mock de antes, para cuando no hay backend configurado --------
-  function cobrarModoManual(total, items){
-    openModal(`
-      <h3>Cobrar ${fmt(total)}</h3>
-      <div class="qr-mock">
-        ${qrSvgMock()}
-        <p style="font-size:12.5px;color:var(--ink-soft);text-align:center;margin:0;">
-          Modo manual: no hay backend de Mercado Pago configurado (Reportes → Conexión con Mercado Pago). Este QR es decorativo.
-        </p>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
-        <button class="btn btn-primary" id="modal-confirm-cobro">Ya me pagaron</button>
+        <button class="btn btn-primary" id="modal-confirm-cobro">Ya cobré</button>
       </div>
     `);
     document.getElementById('modal-cancel').addEventListener('click', closeModal);
@@ -703,35 +600,25 @@
       closeModal();
       toast('Venta cobrada: ' + fmt(total));
     });
-  }
+  });
 
   async function confirmarVentaCobrada(total, items){
+    const alertasStock = [];
     items.forEach(it=>{
       const p = productos.find(x=>x.id===it.productoId);
-      if(p) p.stock = Math.max(0, p.stock - it.cantidad);
+      if(p){
+        p.stock = Math.max(0, p.stock - it.cantidad);
+        if(p.stock <= 3) alertasStock.push(p.nombre);
+      }
     });
     ventas.push({fecha: new Date().toISOString(), items, total});
     carrito = {};
     await saveProductos();
     await saveVentas();
     renderAll();
-  }
-
-  function qrSvgMock(){
-    // decorative mock QR, not a real scannable code
-    let cells = '';
-    const size = 8, cell = 16;
-    let seed = 42;
-    const rand = () => { seed = (seed*9301+49297)%233280; return seed/233280; };
-    for(let y=0;y<size;y++){
-      for(let x=0;x<size;x++){
-        if(rand() > 0.45){
-          cells += `<rect x="${x*cell}" y="${y*cell}" width="${cell-2}" height="${cell-2}" fill="var(--ink)"/>`;
-        }
-      }
-    }
-    return `<svg width="140" height="140" viewBox="0 0 ${size*cell} ${size*cell}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100%" height="100%" fill="#fff"/>${cells}</svg>`;
+    alertasStock.forEach(nombre=>{
+      setTimeout(()=> toast('⚠ Queda poco stock: ' + nombre), 600);
+    });
   }
 
   // ---------------- FIADO ----------------
@@ -760,6 +647,7 @@
           <button class="btn btn-danger btn-sm" data-act="fiar" data-id="${c.id}">Anotar fiado</button>
           <button class="btn btn-primary btn-sm" data-act="pagar" data-id="${c.id}">Registrar pago</button>
           ${c.deuda > 0 ? `<button class="btn btn-gold btn-sm" data-act="wsp" data-id="${c.id}">Recordar por WhatsApp</button>` : ''}
+          <button class="btn btn-ghost btn-sm" data-act="editar" data-id="${c.id}">Editar</button>
           <button class="btn btn-ghost btn-sm" data-act="borrar" data-id="${c.id}">Borrar</button>
         </div>`;
       list.appendChild(box);
@@ -773,6 +661,7 @@
         if(b.dataset.act === 'fiar') openFiadoModal(cliente, 'fiado');
         else if(b.dataset.act === 'pagar') openFiadoModal(cliente, 'pago');
         else if(b.dataset.act === 'wsp') enviarRecordatorioWsp(cliente);
+        else if(b.dataset.act === 'editar') openEditarClienteModal(cliente);
         else if(b.dataset.act === 'borrar'){
           if(confirm('¿Borrar a ' + cliente.nombre + ' del cuaderno?')){
             clientes = clientes.filter(c=>c.id!==id);
@@ -785,6 +674,36 @@
     });
   }
 
+  function openEditarClienteModal(cliente){
+    openModal(`
+      <h3>Editar cliente</h3>
+      <div class="field-group">
+        <label class="field-label">Nombre o apodo</label>
+        <input type="text" id="input-editar-nombre" value="${cliente.nombre}">
+      </div>
+      <div class="field-group">
+        <label class="field-label">WhatsApp (con código de área, sin 0 ni 15)</label>
+        <input type="text" id="input-editar-telefono" value="${cliente.telefono || ''}" placeholder="Ej: 1122334455">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="modal-guardar-edicion">Guardar</button>
+      </div>
+    `);
+    document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('modal-guardar-edicion').addEventListener('click', async ()=>{
+      const nombre = document.getElementById('input-editar-nombre').value.trim();
+      const telefonoRaw = document.getElementById('input-editar-telefono').value.trim();
+      if(!nombre) return;
+      cliente.nombre = nombre;
+      cliente.telefono = telefonoRaw ? normalizarTelefonoAR(telefonoRaw) : '';
+      await saveClientes();
+      closeModal();
+      renderFiado();
+      toast('Cliente actualizado');
+    });
+  }
+
   document.getElementById('btn-nuevo-cliente').addEventListener('click', ()=>{
     openModal(`
       <h3>Nuevo cliente</h3>
@@ -793,8 +712,8 @@
         <input type="text" id="input-nombre-cliente" placeholder="Ej: Marta de la esquina">
       </div>
       <div class="field-group">
-        <label class="field-label">WhatsApp (opcional, con código de país)</label>
-        <input type="text" id="input-telefono-cliente" placeholder="Ej: 5491122334455">
+        <label class="field-label">WhatsApp (opcional, sin 0 ni 15)</label>
+        <input type="text" id="input-telefono-cliente" placeholder="Ej: 1122334455">
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
@@ -804,8 +723,9 @@
     document.getElementById('modal-cancel').addEventListener('click', closeModal);
     document.getElementById('modal-guardar-cliente').addEventListener('click', async ()=>{
       const nombre = document.getElementById('input-nombre-cliente').value.trim();
-      const telefono = document.getElementById('input-telefono-cliente').value.trim().replace(/[^0-9]/g,'');
+      const telefonoRaw = document.getElementById('input-telefono-cliente').value.trim();
       if(!nombre) return;
+      const telefono = telefonoRaw ? normalizarTelefonoAR(telefonoRaw) : '';
       clientes.push({id: uid(), nombre, telefono, deuda:0, historial:[]});
       await saveClientes();
       closeModal();
@@ -814,13 +734,22 @@
     });
   });
 
+  // Arma el numero como lo necesita WhatsApp para Argentina: agrega el
+  // codigo de pais (54) y el prefijo de celular (9) si no estan.
+  function normalizarTelefonoAR(numero){
+    let d = numero.replace(/[^0-9]/g, '');
+    if(d.startsWith('54')) return d;
+    if(d.startsWith('0')) d = d.slice(1);
+    return '549' + d;
+  }
+
   function enviarRecordatorioWsp(cliente){
     if(!cliente.telefono){
       openModal(`
         <h3>Falta el WhatsApp de ${cliente.nombre}</h3>
         <div class="field-group">
-          <label class="field-label">Número con código de país (sin + ni espacios)</label>
-          <input type="text" id="input-telefono-nuevo" placeholder="Ej: 5491122334455">
+          <label class="field-label">Número (sin 0 ni 15)</label>
+          <input type="text" id="input-telefono-nuevo" placeholder="Ej: 1122334455">
         </div>
         <div class="modal-actions">
           <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
@@ -829,9 +758,9 @@
       `);
       document.getElementById('modal-cancel').addEventListener('click', closeModal);
       document.getElementById('modal-guardar-tel').addEventListener('click', async ()=>{
-        const tel = document.getElementById('input-telefono-nuevo').value.trim().replace(/[^0-9]/g,'');
-        if(!tel) return;
-        cliente.telefono = tel;
+        const telRaw = document.getElementById('input-telefono-nuevo').value.trim();
+        if(!telRaw) return;
+        cliente.telefono = normalizarTelefonoAR(telRaw);
         await saveClientes();
         closeModal();
         abrirWhatsApp(cliente);
@@ -907,6 +836,7 @@
         await saveProductos();
         renderStock();
         renderProductoGrid();
+        if(p.stock > 0 && p.stock <= 3) toast('⚠ Queda poco stock: ' + p.nombre);
       });
     });
     card.querySelectorAll('[data-act="borrar-prod"]').forEach(btn=>{
@@ -960,9 +890,12 @@
 
   // ---------------- REPORTES ----------------
   function renderReportes(){
-    const inputBackend = document.getElementById('input-backend-url');
-    if(inputBackend && document.activeElement !== inputBackend){
-      inputBackend.value = getBackendUrl();
+    const qrPreview = document.getElementById('qr-guardado-preview');
+    if(qrPreview){
+      const qrGuardado = localStorage.getItem('qrImagen');
+      qrPreview.innerHTML = qrGuardado
+        ? `<img src="${qrGuardado}" alt="Tu QR" style="width:110px;height:110px;object-fit:contain;border-radius:8px;border:1px solid var(--line);">`
+        : `<span style="font-size:12.5px;color:var(--ink-soft);">Todavía no cargaste ninguno</span>`;
     }
     const today = todayStr();
     const now = Date.now();
@@ -1005,10 +938,17 @@
     if(e.target.id === 'modal-overlay') closeModal();
   });
 
-  document.getElementById('btn-guardar-backend').addEventListener('click', () => {
-    const url = document.getElementById('input-backend-url').value.trim();
-    localStorage.setItem('backendUrl', url);
-    toast(url ? 'Backend guardado' : 'Se quitó el backend (vuelve el modo manual)');
+  document.getElementById('btn-guardar-qr').addEventListener('click', () => {
+    const input = document.getElementById('input-qr-imagen');
+    const archivo = input.files[0];
+    if(!archivo) return;
+    const lector = new FileReader();
+    lector.onload = () => {
+      localStorage.setItem('qrImagen', lector.result);
+      renderReportes();
+      toast('QR guardado');
+    };
+    lector.readAsDataURL(archivo);
   });
 
   document.getElementById('btn-reset-app').addEventListener('click', () => {

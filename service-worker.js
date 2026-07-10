@@ -3,7 +3,7 @@
 // internet en ese momento. Los datos (clientes, ventas, stock) se guardan
 // aparte, en localStorage, no ac\u00e1 - esto solo cachea los archivos de la app.
 
-const CACHE_NAME = 'kiosco-plus-v1';
+const CACHE_NAME = 'kiosco-plus-v2';
 const ARCHIVOS_A_GUARDAR = [
   './',
   './index.html',
