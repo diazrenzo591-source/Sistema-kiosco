@@ -299,6 +299,22 @@
     display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
     gap:10px; margin-bottom:16px;
   }
+  .periodo-selector{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px; margin-bottom:8px; flex-wrap:wrap;
+  }
+  .periodo-tabs{ display:flex; gap:6px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:3px; }
+  .periodo-tab{
+    font-family:'Inter',sans-serif; font-weight:600; font-size:12.5px;
+    padding:6px 12px; border:none; background:transparent; color:var(--ink-soft);
+    border-radius:7px; cursor:pointer;
+  }
+  .periodo-tab.active{ background:var(--teal); color:#fff; }
+  #input-periodo-fecha{ width:auto; max-width:150px; }
+  .periodo-etiqueta{
+    font-size:12.5px; color:var(--ink-soft); font-weight:600;
+    margin:0 0 12px 0;
+  }
   .stat-card{
     background:#fff; border:1px solid var(--line); border-radius:var(--radius);
     padding:14px;
@@ -401,9 +417,20 @@
     <section id="panel-reportes" class="panel">
       <h2 class="section-title">Reportes</h2>
       <p class="section-sub">Resumen del negocio</p>
+
+      <div class="periodo-selector">
+        <div class="periodo-tabs">
+          <button class="periodo-tab active" data-periodo="dia">Día</button>
+          <button class="periodo-tab" data-periodo="semana">Semana</button>
+          <button class="periodo-tab" data-periodo="mes">Mes</button>
+        </div>
+        <input type="date" id="input-periodo-fecha">
+      </div>
+      <p id="periodo-etiqueta" class="periodo-etiqueta"></p>
+
       <div class="stat-grid">
-        <div class="stat-card"><div id="stat-hoy" class="num">$0</div><div class="lbl">Vendido hoy</div></div>
-        <div class="stat-card"><div id="stat-semana" class="num">$0</div><div class="lbl">Vendido últimos 7 días</div></div>
+        <div class="stat-card"><div id="stat-periodo-total" class="num">$0</div><div class="lbl">Vendido en el período</div></div>
+        <div class="stat-card"><div id="stat-periodo-cantidad" class="num">0</div><div class="lbl">Ventas en el período</div></div>
         <div class="stat-card"><div id="stat-fiado" class="num">$0</div><div class="lbl">Fiado pendiente</div></div>
       </div>
       <div class="card">
@@ -889,6 +916,46 @@
   });
 
   // ---------------- REPORTES ----------------
+  let periodoModo = 'dia'; // 'dia' | 'semana' | 'mes'
+
+  const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const DIAS = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+
+  function getRangoPeriodo(modo, fechaStr){
+    const d = new Date(fechaStr + 'T00:00:00');
+
+    if(modo === 'semana'){
+      const diaSemana = d.getDay(); // 0 = domingo
+      const offsetLunes = (diaSemana === 0) ? -6 : 1 - diaSemana;
+      const inicio = new Date(d); inicio.setDate(d.getDate() + offsetLunes); inicio.setHours(0,0,0,0);
+      const fin = new Date(inicio); fin.setDate(inicio.getDate() + 6); fin.setHours(23,59,59,999);
+      const etiqueta = `Semana del ${inicio.getDate()}/${inicio.getMonth()+1} al ${fin.getDate()}/${fin.getMonth()+1}`;
+      return { inicio, fin, etiqueta };
+    }
+    if(modo === 'mes'){
+      const inicio = new Date(d.getFullYear(), d.getMonth(), 1, 0,0,0,0);
+      const fin = new Date(d.getFullYear(), d.getMonth()+1, 0, 23,59,59,999);
+      const etiqueta = MESES[d.getMonth()] + ' ' + d.getFullYear();
+      return { inicio, fin, etiqueta };
+    }
+    // dia
+    const inicio = new Date(d); inicio.setHours(0,0,0,0);
+    const fin = new Date(d); fin.setHours(23,59,59,999);
+    const etiqueta = DIAS[d.getDay()] + ' ' + d.getDate() + ' de ' + MESES[d.getMonth()];
+    return { inicio, fin, etiqueta: etiqueta.charAt(0).toUpperCase() + etiqueta.slice(1) };
+  }
+
+  document.querySelectorAll('.periodo-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('.periodo-tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      periodoModo = tab.dataset.periodo;
+      renderReportes();
+    });
+  });
+
+  document.getElementById('input-periodo-fecha').addEventListener('change', renderReportes);
+
   function renderReportes(){
     const qrPreview = document.getElementById('qr-guardado-preview');
     if(qrPreview){
@@ -897,32 +964,34 @@
         ? `<img src="${qrGuardado}" alt="Tu QR" style="width:110px;height:110px;object-fit:contain;border-radius:8px;border:1px solid var(--line);">`
         : `<span style="font-size:12.5px;color:var(--ink-soft);">Todavía no cargaste ninguno</span>`;
     }
-    const today = todayStr();
-    const now = Date.now();
-    const sevenDays = 7*24*60*60*1000;
 
-    let hoy = 0, semana = 0;
+    const inputFecha = document.getElementById('input-periodo-fecha');
+    if(!inputFecha.value) inputFecha.value = todayStr();
+    const { inicio, fin, etiqueta } = getRangoPeriodo(periodoModo, inputFecha.value);
+    document.getElementById('periodo-etiqueta').textContent = etiqueta;
+
+    let totalPeriodo = 0, cantidadPeriodo = 0;
     const rankingMap = {};
     ventas.forEach(v=>{
       const vDate = new Date(v.fecha);
-      const isToday = v.fecha.slice(0,10) === today;
-      const inWeek = (now - vDate.getTime()) <= sevenDays;
-      if(isToday) hoy += v.total;
-      if(inWeek) semana += v.total;
-      v.items.forEach(it=>{
-        rankingMap[it.nombre] = (rankingMap[it.nombre] || 0) + it.cantidad;
-      });
+      if(vDate >= inicio && vDate <= fin){
+        totalPeriodo += v.total;
+        cantidadPeriodo += 1;
+        v.items.forEach(it=>{
+          rankingMap[it.nombre] = (rankingMap[it.nombre] || 0) + it.cantidad;
+        });
+      }
     });
     const fiadoPendiente = clientes.reduce((s,c)=>s+c.deuda,0);
 
-    document.getElementById('stat-hoy').textContent = fmt(hoy);
-    document.getElementById('stat-semana').textContent = fmt(semana);
+    document.getElementById('stat-periodo-total').textContent = fmt(totalPeriodo);
+    document.getElementById('stat-periodo-cantidad').textContent = cantidadPeriodo;
     document.getElementById('stat-fiado').textContent = fmt(fiadoPendiente);
 
     const ranking = Object.entries(rankingMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
     const rankList = document.getElementById('ranking-list');
     rankList.innerHTML = ranking.length === 0
-      ? '<div class="empty-state">Todavía no hay ventas registradas.</div>'
+      ? '<div class="empty-state">No hay ventas en este período.</div>'
       : ranking.map((r,i)=>`<div class="ranking-item"><span><span class="pos">${i+1}.</span>${r[0]}</span><span>${r[1]} unid.</span></div>`).join('');
   }
 
