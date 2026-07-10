@@ -18,6 +18,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Kiosco+">
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body style="margin:0;">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Kalam:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -293,6 +294,7 @@
   .stock-badge.ok{ background:var(--teal-light); color:var(--teal-dark); }
   .stock-badge.low{ background:var(--red-light); color:var(--red); }
   .stock-input-mini{ width:60px; text-align:center; padding:5px; }
+  .codigo-input-mini{ width:100px; padding:5px; font-size:12px; }
 
   /* ---------- REPORTES ---------- */
   .stat-grid{
@@ -369,6 +371,7 @@
     <section id="panel-cobro" class="panel active">
       <h2 class="section-title">Cobrar</h2>
       <p class="section-sub">Elegí los productos de la venta</p>
+      <button class="btn btn-gold" id="btn-escanear" style="margin-bottom:12px; width:100%;">📷 Escanear producto</button>
       <div id="producto-grid" class="producto-grid"></div>
 
       <div id="carrito-card" class="card" style="display:none;">
@@ -851,10 +854,19 @@
       row.innerHTML = `
         <span class="stock-nombre">${p.nombre}</span>
         <span class="stock-badge ${low ? 'low':'ok'}">${low ? 'Se está por terminar' : 'Stock ok'}</span>
+        <input type="text" class="codigo-input-mini" data-id="${p.id}" value="${p.codigo || ''}" placeholder="Código">
         <input type="number" class="stock-input-mini" data-id="${p.id}" value="${p.stock}" min="0">
         <button class="btn btn-ghost btn-sm" data-act="borrar-prod" data-id="${p.id}">Borrar</button>
       `;
       card.appendChild(row);
+    });
+    card.querySelectorAll('.codigo-input-mini').forEach(inp=>{
+      inp.addEventListener('change', async ()=>{
+        const p = productos.find(x=>x.id===inp.dataset.id);
+        p.codigo = inp.value.trim();
+        await saveProductos();
+        toast('Código guardado');
+      });
     });
     card.querySelectorAll('.stock-input-mini').forEach(inp=>{
       inp.addEventListener('change', async ()=>{
@@ -880,20 +892,30 @@
     });
   }
 
-  document.getElementById('btn-nuevo-producto').addEventListener('click', ()=>{
+  document.getElementById('btn-nuevo-producto').addEventListener('click', ()=> abrirModalNuevoProducto());
+
+  function abrirModalNuevoProducto(valores){
+    valores = valores || { nombre:'', precio:'', stock:'', codigo:'' };
     openModal(`
       <h3>Nuevo producto</h3>
       <div class="field-group">
         <label class="field-label">Nombre</label>
-        <input type="text" id="input-nombre-prod" placeholder="Ej: Chicles Beldent">
+        <input type="text" id="input-nombre-prod" placeholder="Ej: Chicles Beldent" value="${valores.nombre}">
       </div>
       <div class="field-group">
         <label class="field-label">Precio</label>
-        <input type="number" id="input-precio-prod" placeholder="0" min="0">
+        <input type="number" id="input-precio-prod" placeholder="0" min="0" value="${valores.precio}">
       </div>
       <div class="field-group">
         <label class="field-label">Stock inicial</label>
-        <input type="number" id="input-stock-prod" placeholder="0" min="0">
+        <input type="number" id="input-stock-prod" placeholder="0" min="0" value="${valores.stock}">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Código de barras (opcional)</label>
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="input-codigo-prod" placeholder="Ej: 7791234567890" value="${valores.codigo}">
+          <button class="btn btn-gold btn-sm" id="btn-escanear-en-modal" type="button">📷</button>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
@@ -901,19 +923,31 @@
       </div>
     `);
     document.getElementById('modal-cancel').addEventListener('click', closeModal);
+    document.getElementById('btn-escanear-en-modal').addEventListener('click', ()=>{
+      const valoresActuales = {
+        nombre: document.getElementById('input-nombre-prod').value,
+        precio: document.getElementById('input-precio-prod').value,
+        stock: document.getElementById('input-stock-prod').value,
+        codigo: document.getElementById('input-codigo-prod').value,
+      };
+      abrirEscaner({ soloUnaLectura: true, onLectura: (codigo)=>{
+        abrirModalNuevoProducto({ ...valoresActuales, codigo });
+      }});
+    });
     document.getElementById('modal-guardar-prod').addEventListener('click', async ()=>{
       const nombre = document.getElementById('input-nombre-prod').value.trim();
       const precio = parseFloat(document.getElementById('input-precio-prod').value);
       const stock = parseInt(document.getElementById('input-stock-prod').value) || 0;
+      const codigo = document.getElementById('input-codigo-prod').value.trim();
       if(!nombre || !precio) return;
-      productos.push({id: uid(), nombre, precio, stock});
+      productos.push({id: uid(), nombre, precio, stock, codigo});
       await saveProductos();
       closeModal();
       renderProductoGrid();
       renderStock();
       toast('Producto agregado');
     });
-  });
+  }
 
   // ---------------- REPORTES ----------------
   let periodoModo = 'dia'; // 'dia' | 'semana' | 'mes'
@@ -1001,11 +1035,75 @@
     document.getElementById('modal-overlay').classList.add('open');
   }
   function closeModal(){
+    detenerEscaner();
     document.getElementById('modal-overlay').classList.remove('open');
   }
   document.getElementById('modal-overlay').addEventListener('click', (e)=>{
     if(e.target.id === 'modal-overlay') closeModal();
   });
+
+  // ---------------- ESCANER DE CÓDIGOS DE BARRAS ----------------
+  let escanerInstancia = null;
+  let ultimoCodigoLeido = null;
+  let ultimoCodigoTiempo = 0;
+
+  document.getElementById('btn-escanear').addEventListener('click', ()=> abrirEscaner());
+
+  function abrirEscaner(opciones){
+    opciones = opciones || {};
+    openModal(`
+      <h3>${opciones.soloUnaLectura ? 'Escanear código' : 'Escanear productos'}</h3>
+      <div id="scanner-region"></div>
+      <p id="scanner-status" style="font-size:12.5px;color:var(--ink-soft);text-align:center;margin-top:8px;">Apuntá la cámara al código de barras</p>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="btn-cerrar-escaner">${opciones.soloUnaLectura ? 'Cancelar' : 'Listo'}</button>
+      </div>
+    `);
+    document.getElementById('btn-cerrar-escaner').addEventListener('click', closeModal);
+
+    ultimoCodigoLeido = null;
+    escanerInstancia = new Html5Qrcode('scanner-region');
+    escanerInstancia.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 260, height: 140 } },
+      (codigoLeido) => onCodigoEscaneado(codigoLeido, opciones),
+      () => { /* frame sin codigo detectado, se ignora */ }
+    ).catch(() => {
+      const status = document.getElementById('scanner-status');
+      if(status) status.textContent = 'No se pudo abrir la cámara. Revisá los permisos del navegador.';
+    });
+  }
+
+  function onCodigoEscaneado(codigo, opciones){
+    const ahora = Date.now();
+    if(codigo === ultimoCodigoLeido && (ahora - ultimoCodigoTiempo) < 1500) return;
+    ultimoCodigoLeido = codigo;
+    ultimoCodigoTiempo = ahora;
+
+    if(opciones.soloUnaLectura){
+      closeModal();
+      opciones.onLectura(codigo);
+      return;
+    }
+
+    const producto = productos.find(p => p.codigo && p.codigo === codigo);
+    const status = document.getElementById('scanner-status');
+    if(producto){
+      carrito[producto.id] = (carrito[producto.id] || 0) + 1;
+      renderCarrito();
+      if(status) status.textContent = '✔ Agregado: ' + producto.nombre;
+    }else{
+      if(status) status.textContent = '⚠ Código no asociado a ningún producto (cargalo en Stock).';
+    }
+  }
+
+  function detenerEscaner(){
+    if(escanerInstancia){
+      const instanciaAApagar = escanerInstancia;
+      escanerInstancia = null;
+      instanciaAApagar.stop().then(()=> instanciaAApagar.clear()).catch(()=>{});
+    }
+  }
 
   document.getElementById('btn-guardar-qr').addEventListener('click', () => {
     const input = document.getElementById('input-qr-imagen');
