@@ -1062,10 +1062,19 @@
     document.getElementById('btn-cerrar-escaner').addEventListener('click', closeModal);
 
     ultimoCodigoLeido = null;
-    escanerInstancia = new Html5Qrcode('scanner-region');
+    escanerInstancia = new Html5Qrcode('scanner-region', {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+      ]
+    });
     escanerInstancia.start(
       { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 260, height: 140 } },
+      { fps: 6, qrbox: { width: 260, height: 130 } },
       (codigoLeido) => onCodigoEscaneado(codigoLeido, opciones),
       () => { /* frame sin codigo detectado, se ignora */ }
     ).catch(() => {
@@ -1076,7 +1085,7 @@
 
   function onCodigoEscaneado(codigo, opciones){
     const ahora = Date.now();
-    if(codigo === ultimoCodigoLeido && (ahora - ultimoCodigoTiempo) < 1500) return;
+    if(codigo === ultimoCodigoLeido && (ahora - ultimoCodigoTiempo) < 2500) return;
     ultimoCodigoLeido = codigo;
     ultimoCodigoTiempo = ahora;
 
@@ -1094,6 +1103,19 @@
       if(status) status.textContent = '✔ Agregado: ' + producto.nombre;
     }else{
       if(status) status.textContent = '⚠ Código no asociado a ningún producto (cargalo en Stock).';
+    }
+
+    // Pausa un momento la cámara para que no vuelva a leer el mismo
+    // producto varias veces mientras todavía está apuntado.
+    if(escanerInstancia){
+      try{
+        escanerInstancia.pause(true);
+        setTimeout(()=>{
+          if(escanerInstancia){
+            try{ escanerInstancia.resume(); }catch(e){}
+          }
+        }, 1300);
+      }catch(e){}
     }
   }
 
