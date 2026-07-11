@@ -447,6 +447,11 @@
         <button class="btn btn-primary btn-sm" id="btn-guardar-qr">Guardar QR</button>
       </div>
       <div class="card">
+        <h3 style="font-family:'Baloo 2',sans-serif; margin:0 0 6px 0; font-size:14.5px;">ID de este kiosco</h3>
+        <p style="font-size:12.5px; color:var(--ink-soft); margin:0 0 8px 0;">Si te lo piden, pasá este código.</p>
+        <p id="texto-cliente-id" style="font-family:monospace; font-size:13px; background:#fff; padding:8px; border-radius:8px; border:1px solid var(--line); word-break:break-all;"></p>
+      </div>
+      <div class="card">
         <h3 style="font-family:'Baloo 2',sans-serif; margin:0 0 6px 0; font-size:14.5px;">Zona de reinicio</h3>
         <p style="font-size:12.5px; color:var(--ink-soft); margin:0 0 10px 0;">
           Borra todos los productos, clientes y ventas cargados en este celular, para arrancar de cero (por ejemplo, al instalarla por primera vez en un kiosco nuevo).
@@ -464,6 +469,48 @@
 
 <script>
 (function(){
+  // ---------------- LICENCIAS (activar/desactivar kioscos individualmente) ----------------
+  // Completá esta URL con un archivo JSON público (por ejemplo, un archivo
+  // en un repo de GitHub) que contenga un array con los IDs de kiosco
+  // activos, ej: ["k_8f3a2c", "k_91bcde"]. Si la dejás vacía, no se
+  // bloquea a nadie (comportamiento actual).
+  const URL_LICENCIAS = '';
+
+  // Texto que ve el kiosquero si su cuenta no está activa.
+  const MENSAJE_SUSPENSION = 'Contactanos para reactivar tu cuenta.';
+
+  let clienteId = localStorage.getItem('clienteId');
+  if(!clienteId){
+    clienteId = 'k_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+    localStorage.setItem('clienteId', clienteId);
+  }
+
+  async function verificarLicencia(){
+    if(!URL_LICENCIAS) return; // sin lista configurada, no se bloquea a nadie
+    try{
+      const resp = await fetch(URL_LICENCIAS + '?t=' + Date.now(), { cache:'no-store' });
+      if(!resp.ok) return;
+      const activos = await resp.json();
+      if(Array.isArray(activos) && !activos.includes(clienteId)){
+        mostrarBloqueo();
+      }
+    }catch(e){
+      // Sin internet en este momento: no bloqueamos, sigue usando lo que ya tiene guardado.
+    }
+  }
+
+  function mostrarBloqueo(){
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(43,38,32,0.94);z-index:999;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;';
+    overlay.innerHTML = `
+      <div style="max-width:280px;">
+        <div style="font-family:'Baloo 2',sans-serif;font-size:20px;font-weight:800;margin-bottom:10px;color:#fff;">Cuenta pausada</div>
+        <p style="font-size:14px;color:#fff;opacity:0.9;margin-bottom:14px;">${MENSAJE_SUSPENSION}</p>
+        <p style="font-size:11px;color:#fff;opacity:0.55;">ID: ${clienteId}</p>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+
   // Esta app, al publicarse afuera de Claude, guarda los datos con
   // localStorage (la memoria propia del navegador/celular), en vez de
   // window.storage (que solo existe dentro del chat de Claude).
@@ -991,6 +1038,9 @@
   document.getElementById('input-periodo-fecha').addEventListener('change', renderReportes);
 
   function renderReportes(){
+    const idEl = document.getElementById('texto-cliente-id');
+    if(idEl) idEl.textContent = clienteId;
+
     const qrPreview = document.getElementById('qr-guardado-preview');
     if(qrPreview){
       const qrGuardado = localStorage.getItem('qrImagen');
@@ -1150,6 +1200,7 @@
   });
 
   loadAll();
+  verificarLicencia();
 })();
 </script>
 
